@@ -1,43 +1,126 @@
 'use strict';
 
-// Content script file will run in the context of web page.
-// With content script you can manipulate the web pages using
-// Document Object Model (DOM).
-// You can also pass information to the parent extension.
+var currentSiteTitle = document.title;
+var dateTimeKey = Date.now();
+var previousSite = 'none';
+var currentSite = '';
 
-// We execute this script by making an entry in manifest.json file
-// under `content_scripts` property
-
-// For more information on Content Scripts,
-// See https://developer.chrome.com/extensions/content_scripts
-
-// Log `title` of current active web page
-const pageTitle = document.head.getElementsByTagName('title')[0].innerHTML;
-console.log(
-  `Page title is: '${pageTitle}' - evaluated by Chrome extension's 'contentScript.js' file`
-);
-
-// Communicate with background file by sending a message
-chrome.runtime.sendMessage(
-  {
-    type: 'GREETINGS',
-    payload: {
-      message: 'Hello, my name is Con. I am from ContentScript.',
-    },
-  },
-  (response) => {
-    console.log(response.message);
-  }
-);
-
-// Listen for message
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === 'COUNT') {
-    console.log(`Current count is ${request.payload.count}`);
-  }
-
-  // Send an empty response
-  // See https://github.com/mozilla/webextension-polyfill/issues/130#issuecomment-531531890
-  sendResponse({});
-  return true;
+chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
+  console.log(tabId, changeInfo, tab);
+  currentSite = window.location.href;
 });
+
+function storeNodes(result, currentSite) {
+  var nodes = result["nodes"];
+  var categories = result["categories"];
+  console.log(categories);
+
+  var siteExistsFlag = false;
+  var categoryExistsFlag = false;
+
+  var currentIndex = -1;
+  var newNodeId = parseInt(Object.keys(nodes).pop()) + 1;
+
+  var currentCategory = currentSite.split("/").slice(0, 3).join("/");
+  var newCategoryId = categories.length;
+
+  // check if category exists
+  // if it doesn't, add it to categories & give node currentCategoryId
+  for (let j = 0; j < categories.length; j++) {
+    if (currentCategory == categories[j].name) {
+      categoryExistsFlag = true;
+      newCategoryId = j;
+      break;
+    }
+  };
+
+  if (categoryExistsFlag == false) {
+    categories.push({ name: currentCategory });
+  };
+
+  // check if site exists
+  // if it doesn't, add it to nodes and increment node size
+  for (let i = 0; i < nodes.length; i++) {
+    if (currentSite == nodes[i].name) {
+      siteExistsFlag = true;
+      currentIndex = i;
+      break;
+    }
+  };
+
+  if (siteExistsFlag == false) {
+    nodes.push({ id: newNodeId, name: currentSite, symbolSize: 1, category: newCategoryId, title: currentSiteTitle });
+  }
+  else {
+    nodes[currentIndex].symbolSize = nodes[currentIndex].symbolSize + 2
+  };
+
+  return [nodes, categories];
+}
+
+function storeLinks(result, previousSite, currentSite) {
+  var links = result["links"];
+  var nodes = result["nodes"];
+
+  var previousId = 0;
+  var currentId = 0;
+
+  for (let j = 0; j < nodes.length; j++) {
+    if (previousSite == nodes[j].name) {
+      previousId = nodes[j].id;
+    };
+    if (currentSite == nodes[j].name) {
+      currentId = nodes[j].id;
+    };
+  };
+
+  links.push({ source: previousId, target: currentId, previousSite: previousSite, currentSite: currentSite });
+
+  return links;
+}
+
+chrome.storage.local.get(function (result) {
+
+  console.log(result);
+
+  if (result["nodes"] === undefined) {
+    result = {
+      "nodes": [
+        {
+          id: 0,
+          name: '',
+          symbolSize: 0,
+          category: 0,
+          title: 'Start'
+        }
+      ],
+      "links": [
+        {
+          source: 0,
+          target: 0
+        }
+      ],
+      "categories": [
+        {
+          name: 'Start'
+        }
+      ]
+    }
+  };
+
+  previousSite = result["links"].slice(-1)[0].currentSite;
+
+  // store nodes & categories
+  var [newNodes, newCategories] = storeNodes(result, currentSite);
+  chrome.storage.local.set({ "categories": newCategories }).then(() => { });
+  chrome.storage.local.set({ "nodes" : newNodes }).then(() => {
+
+    // store links
+    var newLinks = storeLinks(result, previousSite, currentSite);
+    chrome.storage.local.set({ "links" : newLinks }).then(() => { });
+
+  });
+
+
+});
+
