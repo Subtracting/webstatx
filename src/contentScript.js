@@ -3,12 +3,18 @@
 var currentSiteTitle = document.title;
 var dateTimeKey = Date.now();
 var previousSite = 'none';
-var currentSite = '';
 
-chrome.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
-  console.log(tabId, changeInfo, tab);
-  currentSite = window.location.href;
+let currentSite = window.location.href;
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === "TAB_UPDATED") {
+    currentSite = message.url;
+    console.log("Tab updated:", currentSite);
+  }
 });
+
+console.log("Initial site:", currentSite);
+
 
 function storeNodes(result, currentSite) {
   var nodes = result["nodes"];
