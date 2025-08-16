@@ -22,7 +22,7 @@ chrome.storage.local.get(function (graph) {
     tooltip: {show: false},
     legend: [
       {
-        selectedMode: "multiple",
+        selectedMode: 'multiple',
         type: "scroll",
         data: graph.categories.map(function (a) {
           return a.name;
@@ -37,7 +37,7 @@ chrome.storage.local.get(function (graph) {
     series: [
       {
         type: 'graph',
-        layout: 'circular',
+        layout: 'force',
         data: graph.nodes,
         links: graph.links,
         categories: graph.categories,
@@ -45,7 +45,14 @@ chrome.storage.local.get(function (graph) {
           show: true,
           position: 'right',
           formatter: function(d) {
-            return d.data.title;
+            let t = d.data.title || '';
+            return t.length > 15 ? t.slice(0, 15) + '...' : t;
+          }
+        },
+        tooltip : {
+          show: true,
+          formatter: function(params) {
+            return params.data.title || params.name
           }
         },
         labelLayout: {
@@ -76,8 +83,30 @@ option && myChart.setOption(option);
 
 myChart.on('click', function (params) {
   if (params.seriesType === 'graph') {
+    myChart.dispatchAction({
+      type: 'focusNodeAdjacency',
+      seriesIndex: 0,
+      dataIndex: params.dataIndex
+    });
     chrome.tabs.query({currentWindow: true, active: true}, function (tab) {
       chrome.tabs.update(tab.id, {url: params.data.name});
     });
   }
-})
+});
+
+myChart.on('legendselectchanged', function (params) {
+  let selectedName = params.name;
+
+  let idx = graph.nodes.findIndex(n =>
+    n.name === selectedName
+  );
+
+  if (idx !== -1) {
+    myChart.dispatchAction({
+      type: 'focusNodeAdjacency',
+      seriesIndex: 0,
+      dataIndex: idx
+    });
+  }
+});
+
